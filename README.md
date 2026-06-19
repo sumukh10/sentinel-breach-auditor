@@ -3,6 +3,7 @@
 A zero-leak password auditing tool. Checks whether a password has appeared in known data breaches and scores its resistance to offline cracking — **without the password ever leaving the browser intact.**
 
 🔗 **Live demo:** https://sumukh10.github.io/sentinel-breach-auditor/
+🏠 **Portfolio:** https://sumukh10.github.io/
 
 ## What it does
 
