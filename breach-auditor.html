@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel — Password Breach Auditor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --border: #1a2332;
+    --accent: #00ff88;
+    --accent2: #00c8ff;
+    --text: #e8edf2;
+    --muted: #5a6a7e;
+    --danger: #ff3b5c;
+    --warn: #ffbd2e;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    cursor: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cursor {
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    transition: transform 0.1s ease;
+  }
+  .cursor-trail {
+    width: 30px; height: 30px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    position: fixed;
+    pointer-events: none;
+    z-index: 9998;
+    transition: all 0.15s ease;
+    opacity: 0.5;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,136,0.015) 2px, rgba(0,255,136,0.015) 4px);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 3rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,12,16,0.9);
+    backdrop-filter: blur(12px);
+  }
+  .nav-logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-decoration: none;
+  }
+  .nav-logo span { color: var(--muted); }
+  .nav-back {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-back:hover { color: var(--accent); }
+
+  /* MAIN */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 7rem 1.5rem 4rem;
+    position: relative;
+  }
+
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 640px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-bottom: 0.75rem;
+  }
+  h1 span {
+    color: transparent;
+    -webkit-text-stroke: 1px var(--accent);
+  }
+
+  .subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 2.5rem;
+  }
+
+  /* INPUT CARD */
+  .input-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+  .input-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+
+  .input-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .password-wrap {
+    position: relative;
+    flex: 1;
+  }
+
+  .password-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.9rem;
+    padding: 0.85rem 3rem 0.85rem 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .password-input:focus { border-color: rgba(0,255,136,0.4); }
+  .password-input::placeholder { color: var(--muted); }
+
+  .toggle-vis {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1rem;
+    cursor: none;
+    padding: 0.25rem;
+    transition: color 0.2s;
+    line-height: 1;
+  }
+  .toggle-vis:hover { color: var(--accent); }
+
+  .btn-audit {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.85rem 1.5rem;
+    cursor: none;
+    transition: all 0.2s;
+    white-space: nowrap;
+    clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    flex-shrink: 0;
+  }
+  .btn-audit:hover { background: var(--accent2); transform: translateY(-1px); }
+  .btn-audit:disabled { opacity: 0.5; }
+
+  /* STRENGTH BAR */
+  .strength-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .strength-bar-track {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .strength-bar-fill {
+    height: 100%;
+    width: 0%;
+    transition: width 0.4s ease, background 0.4s ease;
+    background: var(--danger);
+  }
+  .strength-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    width: 70px;
+    text-align: right;
+  }
+
+  /* RESULTS */
+  .results {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    pointer-events: none;
+  }
+  .results.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: all;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    transition: border-color 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .result-card.breach { border-color: rgba(255,59,92,0.4); }
+  .result-card.safe { border-color: rgba(0,255,136,0.3); }
+
+  .result-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .result-icon { font-size: 1.2rem; line-height: 1; }
+  .result-card-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .result-status {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-left: auto;
+  }
+  .result-status.ok { color: var(--accent); }
+  .result-status.bad { color: var(--danger); }
+  .result-status.warn { color: var(--warn); }
+
+  .breach-count {
+    font-family: 'Space Mono', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--danger);
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .breach-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+  .metric {
+    background: var(--surface);
+    padding: 1.25rem 1.5rem;
+  }
+  .metric-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--accent2);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+  .metric-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* POLICY */
+  .policy-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .policy-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+  }
+  .policy-check {
+    width: 16px; height: 16px;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+  .policy-check.pass { background: rgba(0,255,136,0.1); border-color: rgba(0,255,136,0.4); color: var(--accent); }
+  .policy-check.fail { background: rgba(255,59,92,0.08); border-color: rgba(255,59,92,0.3); color: var(--danger); }
+
+  /* K-ANON NOTE */
+  .privacy-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(0,200,255,0.04);
+    border: 1px solid rgba(0,200,255,0.12);
+    padding: 1rem 1.25rem;
+    margin-top: 1rem;
+  }
+  .privacy-note-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .privacy-note-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    line-height: 1.7;
+    letter-spacing: 0.02em;
+  }
+  .privacy-note-text strong { color: var(--accent2); }
+
+  /* LOADING */
+  .spinner {
+    display: none;
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ERROR */
+  .error-msg {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--danger);
+    padding: 0.75rem 1rem;
+    border: 1px solid rgba(255,59,92,0.3);
+    background: rgba(255,59,92,0.05);
+    display: none;
+    margin-bottom: 1rem;
+  }
+
+  /* FOOTER */
+  footer {
+    padding: 1.5rem 3rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+  .footer-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .footer-text span { color: var(--accent); }
+
+  @media (max-width: 600px) {
+    nav { padding: 1rem 1.5rem; }
+    main { padding: 6rem 1rem 3rem; }
+    .input-row { flex-direction: column; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+    footer { padding: 1rem 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-trail" id="cursorTrail"></div>
+<div class="grid-bg"></div>
+
+<nav>
+  <a href="index.html" class="nav-logo">SG<span>://</span>sentinel</a>
+  <a href="index.html" class="nav-back">← Portfolio</a>
+</nav>
+
+<main>
+  <div class="container">
+    <div class="hero-label">// Password Breach Auditor</div>
+    <h1>Sentinel<br><span>Breach Check</span></h1>
+    <p class="subtitle">Zero-leak audit via k-anonymity. Your password never leaves your browser intact.</p>
+
+    <div class="input-card">
+      <label class="input-label" for="pwInput">Enter password to audit</label>
+      <div class="input-row">
+        <div class="password-wrap">
+          <input
+            class="password-input"
+            type="password"
+            id="pwInput"
+            placeholder="Type a password..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="toggle-vis" id="toggleVis" title="Show/hide password" aria-label="Toggle visibility">👁</button>
+        </div>
+        <button class="btn-audit" id="auditBtn">Audit →</button>
+      </div>
+      <div class="strength-row">
+        <div class="strength-bar-track">
+          <div class="strength-bar-fill" id="strengthBar"></div>
+        </div>
+        <div class="strength-label" id="strengthLabel">—</div>
+      </div>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="spinner" id="spinner"></div>
+
+    <div class="results" id="results">
+
+      <!-- BREACH STATUS -->
+      <div class="result-card" id="breachCard">
+        <div class="result-card-header">
+          <div class="result-icon" id="breachIcon">🔍</div>
+          <div class="result-card-title">Breach Status</div>
+          <div class="result-status" id="breachStatus"></div>
+        </div>
+        <div class="breach-count" id="breachCount"></div>
+        <div class="breach-sub" id="breachSub"></div>
+      </div>
+
+      <!-- METRICS -->
+      <div class="metrics-grid">
+        <div class="metric">
+          <div class="metric-val" id="entropyVal">—</div>
+          <div class="metric-label">Entropy (bits)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val" id="crackVal">—</div>
+          <div class="metric-label">Offline crack time</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val" id="lengthVal">—</div>
+          <div class="metric-label">Length</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val" id="poolVal">—</div>
+          <div class="metric-label">Char pool size</div>
+        </div>
+      </div>
+
+      <!-- POLICY -->
+      <div class="result-card">
+        <div class="result-card-header">
+          <div class="result-icon">📋</div>
+          <div class="result-card-title">Policy Checks</div>
+        </div>
+        <div class="policy-list" id="policyList"></div>
+      </div>
+
+    </div>
+
+    <div class="privacy-note">
+      <div class="privacy-note-icon">🔒</div>
+      <div class="privacy-note-text">
+        <strong>How k-anonymity protects you:</strong> Your password is hashed with SHA-1 locally. Only the first 5 characters of that hash are sent to the HaveIBeenPwned API. ~500 matching suffixes are returned and matched client-side. The server never sees enough to identify your password.
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <div class="footer-text">Sentinel — by <span>Sumukh Gowda</span></div>
+  <div class="footer-text">Powered by <span>HaveIBeenPwned</span> · Zero data stored</div>
+</footer>
+
+<script>
+  // --- Cursor ---
+  const cursor = document.getElementById('cursor');
+  const trail = document.getElementById('cursorTrail');
+  let mx = 0, my = 0, tx = 0, ty = 0;
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    cursor.style.left = mx - 5 + 'px';
+    cursor.style.top = my - 5 + 'px';
+  });
+  (function animateTrail() {
+    tx += (mx - tx) * 0.12;
+    ty += (my - ty) * 0.12;
+    trail.style.left = tx - 15 + 'px';
+    trail.style.top = ty - 15 + 'px';
+    requestAnimationFrame(animateTrail);
+  })();
+  document.querySelectorAll('a, button').forEach(el => {
+    el.addEventListener('mouseenter', () => { cursor.style.transform = 'scale(2)'; trail.style.transform = 'scale(1.5)'; });
+    el.addEventListener('mouseleave', () => { cursor.style.transform = 'scale(1)'; trail.style.transform = 'scale(1)'; });
+  });
+
+  // --- Toggle visibility ---
+  const pwInput = document.getElementById('pwInput');
+  document.getElementById('toggleVis').addEventListener('click', () => {
+    pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+  });
+
+  // --- Strength bar (live) ---
+  const COMMON = ['password','123456','qwerty','abc123','letmein','monkey','1234567','dragon','master','login','welcome','sunshine','princess','shadow','superman','michael','football','whatever','trustno1','iloveyou'];
+
+  function poolSize(pw) {
+    let pool = 0;
+    if (/[a-z]/.test(pw)) pool += 26;
+    if (/[A-Z]/.test(pw)) pool += 26;
+    if (/[0-9]/.test(pw)) pool += 10;
+    if (/[^a-zA-Z0-9]/.test(pw)) pool += 32;
+    return pool || 1;
+  }
+
+  function entropy(pw) {
+    return Math.log2(Math.pow(poolSize(pw), pw.length));
+  }
+
+  function crackTime(bits) {
+    const guesses = Math.pow(2, bits);
+    const rate = 1e11;
+    const seconds = guesses / rate;
+    if (seconds < 1) return '< 1 sec';
+    if (seconds < 60) return Math.round(seconds) + ' sec';
+    if (seconds < 3600) return Math.round(seconds / 60) + ' min';
+    if (seconds < 86400) return Math.round(seconds / 3600) + ' hrs';
+    if (seconds < 31536000) return Math.round(seconds / 86400) + ' days';
+    const years = seconds / 31536000;
+    if (years < 1e6) return Math.round(years).toLocaleString() + ' yrs';
+    if (years < 1e9) return (years / 1e6).toFixed(1) + 'M yrs';
+    if (years < 1e12) return (years / 1e9).toFixed(1) + 'B yrs';
+    return '> 1T yrs';
+  }
+
+  function strengthScore(pw) {
+    const e = entropy(pw);
+    if (pw.length === 0) return { score: 0, label: '—', color: 'var(--border)' };
+    if (e < 28) return { score: 10, label: 'Trivial', color: 'var(--danger)' };
+    if (e < 36) return { score: 25, label: 'Weak', color: '#ff6b35' };
+    if (e < 60) return { score: 55, label: 'Fair', color: 'var(--warn)' };
+    if (e < 80) return { score: 78, label: 'Strong', color: '#7fff00' };
+    return { score: 100, label: 'Very Strong', color: 'var(--accent)' };
+  }
+
+  pwInput.addEventListener('input', () => {
+    const pw = pwInput.value;
+    const { score, label, color } = strengthScore(pw);
+    const bar = document.getElementById('strengthBar');
+    bar.style.width = score + '%';
+    bar.style.background = color;
+    document.getElementById('strengthLabel').style.color = pw.length ? color : 'var(--muted)';
+    document.getElementById('strengthLabel').textContent = label;
+  });
+
+  // Enter key triggers audit
+  pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') audit(); });
+
+  // --- SHA-1 via Web Crypto ---
+  async function sha1(str) {
+    const buf = new TextEncoder().encode(str);
+    const hashBuf = await crypto.subtle.digest('SHA-1', buf);
+    return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  // --- Policy checks ---
+  function policyChecks(pw) {
+    return [
+      { label: 'At least 12 characters', pass: pw.length >= 12 },
+      { label: 'Uppercase letter (A–Z)', pass: /[A-Z]/.test(pw) },
+      { label: 'Lowercase letter (a–z)', pass: /[a-z]/.test(pw) },
+      { label: 'Number (0–9)', pass: /[0-9]/.test(pw) },
+      { label: 'Special character (!@#…)', pass: /[^a-zA-Z0-9]/.test(pw) },
+      { label: 'No common sequences', pass: !COMMON.includes(pw.toLowerCase()) },
+      { label: 'No repeated characters (aaa)', pass: !/(.)\1{2,}/.test(pw) },
+    ];
+  }
+
+  // --- Main audit ---
+  async function audit() {
+    const pw = pwInput.value;
+    if (!pw) return;
+
+    const btn = document.getElementById('auditBtn');
+    const spinner = document.getElementById('spinner');
+    const results = document.getElementById('results');
+    const errorMsg = document.getElementById('errorMsg');
+
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    spinner.style.display = 'block';
+    results.classList.remove('visible');
+    errorMsg.style.display = 'none';
+
+    try {
+      const hash = await sha1(pw);
+      const prefix = hash.slice(0, 5);
+      const suffix = hash.slice(5);
+
+      const resp = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+        headers: { 'Add-Padding': 'true' }
+      });
+      if (!resp.ok) throw new Error(`HIBP API error: ${resp.status}`);
+      const text = await resp.text();
+
+      // Match suffix client-side
+      let breachCount = 0;
+      for (const line of text.split('\n')) {
+        const [s, c] = line.trim().split(':');
+        if (s === suffix) { breachCount = parseInt(c, 10); break; }
+      }
+
+      // Render breach card
+      const breachCard = document.getElementById('breachCard');
+      const breachIcon = document.getElementById('breachIcon');
+      const breachStatus = document.getElementById('breachStatus');
+      const breachCountEl = document.getElementById('breachCount');
+      const breachSub = document.getElementById('breachSub');
+
+      if (breachCount > 0) {
+        breachCard.className = 'result-card breach';
+        breachIcon.textContent = '⚠️';
+        breachStatus.textContent = 'PWNED';
+        breachStatus.className = 'result-status bad';
+        breachCountEl.textContent = breachCount.toLocaleString();
+        breachSub.textContent = 'times seen in known data breaches — do not use this password';
+      } else {
+        breachCard.className = 'result-card safe';
+        breachIcon.textContent = '✅';
+        breachStatus.textContent = 'CLEAN';
+        breachStatus.className = 'result-status ok';
+        breachCountEl.textContent = '0';
+        breachSub.textContent = 'not found in any known breach database';
+      }
+
+      // Metrics
+      const e = entropy(pw);
+      const pool = poolSize(pw);
+      document.getElementById('entropyVal').textContent = Math.round(e);
+      document.getElementById('crackVal').textContent = crackTime(e);
+      document.getElementById('lengthVal').textContent = pw.length;
+      document.getElementById('poolVal').textContent = pool;
+
+      // Policy
+      const checks = policyChecks(pw);
+      const policyList = document.getElementById('policyList');
+      policyList.innerHTML = '';
+      checks.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'policy-item';
+        item.innerHTML = `<div class="policy-check ${c.pass ? 'pass' : 'fail'}">${c.pass ? '✓' : '✗'}</div><span>${c.label}</span>`;
+        policyList.appendChild(item);
+      });
+
+      results.classList.add('visible');
+
+    } catch (err) {
+      errorMsg.textContent = '⚠ ' + (err.message || 'Network error — check your connection and try again.');
+      errorMsg.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Audit →';
+      spinner.style.display = 'none';
+    }
+  }
+
+  document.getElementById('auditBtn').addEventListener('click', audit);
+</script>
+</body>
+</html>
